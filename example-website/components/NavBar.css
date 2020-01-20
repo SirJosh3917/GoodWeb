@@ -1,0 +1,8 @@
+.navbar {
+	background-color: green;
+}
+
+div {
+  background: gray;
+  background: linear-gradient(to bottom, white 0%, black 100%);
+}
