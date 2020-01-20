@@ -33,24 +33,66 @@ async function main(directory) {
 
 	// @ts-ignore
 	const websiteRender = render(pages, new ComponentStore(components));
+	const globalCss = genCss(websiteRender.componentsUsedOnEveryPage);
 
-	// make a css file for all of the pages
-	let globalCssContent = websiteRender.componentsUsedOnEveryPage
-		.map(component => component.css.raw)
-		.reduce((a, b) => `${a}\r\n${b}`);
+	let additionalCss = [];
 
-	const globalCss = {
-		name: `global.${md5(globalCssContent)}.css`,
-		file: globalCssContent
-	};
+	let files = websiteRender.pages.map(renderResult => ({
+		name: renderResult.page.name + ".html",
+		file: writePage(websiteRender, renderResult, globalCss, additionalCss)
+	}));
 
-	let files = websiteRender.pages.map(x => x.page).map(page => ({
-		name: page.name + ".html",
-		file: PseudoHTML.stringify(attachCss(page.document, globalCss))}
-	));
 	files.push(globalCss);
+	
+	for (const cssFile of additionalCss) {
+		files.push(cssFile);
+	}
 
 	build(directory, files);
+}
+
+function genCss(components) {
+	if (components.length === 0) {
+		return undefined;
+	}
+
+	let cssContent = components
+		.map(component => component.css.raw)
+		.reduce((a, b) => `${a}\n${b}`);
+
+	const cssResult = {
+		name: `global.${md5(cssContent)}.css`,
+		file: cssContent
+	};
+	
+	return cssResult;
+}
+
+/**
+ * @param {import("./page-rendering").RenderResult} websiteRender
+ * @param {import("./page-rendering").PageRender} render
+ * @param {{ name: string; file: any; }} globalCss
+ */
+function writePage(websiteRender, render, globalCss, additionalCss) {
+	let currentPage = render.page.document;
+
+	if (globalCss !== undefined) {
+		currentPage = attachCss(currentPage, globalCss);
+	}
+
+	const componentsNotInGlobal = render.componentsUsed
+		.filter(x => websiteRender.componentsUsedOnEveryPage.find(y => y.name === x.name) === undefined);
+
+	if (componentsNotInGlobal.length > 0) {
+		// have to attach a custom css file just for the components that are used
+		const pageCss = genCss(componentsNotInGlobal);
+		additionalCss.push(pageCss);
+
+		currentPage = attachCss(currentPage, pageCss);
+	}
+
+	const result = PseudoHTML.stringify(currentPage);
+	return result;
 }
 
 function attachCss(document, globalCss) {

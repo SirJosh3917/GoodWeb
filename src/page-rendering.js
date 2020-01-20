@@ -170,9 +170,7 @@ export function render(pages, componentStore) {
 		/** @type {import('./pseudo-html-parser').PseudoHTMLNode} */
 		const transformed = visitor.traverse(document, {
 			goodwebInnerNode: undefined,
-			state: {
-				test: "ok"
-			}
+			state: {}
 		});
 
 		visitedPages.push({
