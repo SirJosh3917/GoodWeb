@@ -2,6 +2,7 @@
 
 import PseudoHTML from './pseudo-html-parser';
 import { NodeVisitor } from './nodevisitor';
+import chalk from 'chalk';
 
 // handles where pages are rendered
 
@@ -76,10 +77,21 @@ function computeAttributes(state, attributes) {
 			}
 
 			computeEnvironment += `return (${computing});`;
-			computed.push({
-				name: attribute.name,
-				value: new Function(computeEnvironment)()
-			});
+
+			try {
+				const computedComponent = new Function(computeEnvironment)();
+
+				const newAttribute = {
+					name: attribute.name,
+					value: computedComponent
+				};
+
+				computed.push(newAttribute);
+				newState[newAttribute.name] = newAttribute.value;
+			} catch (e) {
+				console.log(`error computing component in enviornment '${computeEnvironment}' w/ state ${JSON.stringify(state)}`);
+				throw e;
+			}
 		} else {
 			// not an attribute to be compued
 			computed.push({ ...attribute });
@@ -116,7 +128,7 @@ export function render(pages, componentStore) {
 		let componentsUsed = [];
 
 		const visitor = new NodeVisitor((node, options) => {
-			let { goodwebInnerNode, state } = options || { goodwebInnerNode: undefined, state: undefined };
+			let { goodwebInnerNode, state, hierarchy } = options || { goodwebInnerNode: [], state: undefined, hierarchy: [] };
 
 			if (node.nodeName.toUpperCase() === "GOODWEB-INNER") {
 				// if we have reached a GOODWEB-INNER node, we will take out 'innerNode'
@@ -124,9 +136,16 @@ export function render(pages, componentStore) {
 
 				// this will effectively compute a structure where the contents of the component node
 				// will be substituted in
-				return visitor.traverse(goodwebInnerNode, {
-					goodwebInnerNode: undefined,
-					state: state
+				if (goodwebInnerNode.length === 0) {
+					console.log(chalk.red('walked into a GoodWeb-Inner node without a goodwebInnerNode'));
+					console.log(hierarchy)
+				}
+
+				const first = goodwebInnerNode.pop();
+				return visitor.traverse(first, {
+					goodwebInnerNode: goodwebInnerNode,
+					state: state,
+					hierarchy: [ ...hierarchy, node ]
 				});
 			}
 
@@ -139,7 +158,7 @@ export function render(pages, componentStore) {
 				let computedNode = { ...node };
 				const result = computeState(state, computedNode, undefined);
 				computedNode.nodeAttributes = result.attributes;
-				return visitor.traverseInner(computedNode, { goodwebInnerNode: goodwebInnerNode, state: result.state });
+				return visitor.traverseInner(computedNode, { goodwebInnerNode: goodwebInnerNode, state: result.state, hierarchy: [ ...hierarchy, node ] });
 			}
 
 			// keep a running total of used components
@@ -162,15 +181,19 @@ export function render(pages, componentStore) {
 			const traverseNode = { ...component.html };
 
 			return visitor.traverse(traverseNode, {
-				goodwebInnerNode: innerNode,
-				state: result.state
+				goodwebInnerNode: [ ...goodwebInnerNode, innerNode ],
+				state: result.state,
+				hierarchy: [ ...hierarchy, node ]
 			});
 		});
 
 		/** @type {import('./pseudo-html-parser').PseudoHTMLNode} */
 		const transformed = visitor.traverse(document, {
-			goodwebInnerNode: undefined,
-			state: {}
+			goodwebInnerNode: [],
+			state: {
+				url: page.path
+			},
+			hierarchy: []
 		});
 
 		visitedPages.push({

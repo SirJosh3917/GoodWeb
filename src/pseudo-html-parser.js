@@ -6,14 +6,14 @@ class PseudoHTML {
 	/**
 	 * @param {string} html
 	 */
-	parse(html) {
+	parse(html, extraInfo) {
 		const root = {
 			nodeName: '#document',
 			nodeAttributes: [],
 			childNodes: []
 		};
 
-		for (const node of domize(tokenize(html))) {
+		for (const node of domize(tokenize(html, extraInfo), extraInfo)) {
 			root.childNodes.push(node);
 		}
 
@@ -91,7 +91,7 @@ const tokenTypes = {
 /**
  * @param {Iterable<{type: number, data?: string}>} tokens 
  */
-function *domize(tokens) {
+function *domize(tokens, extraInfo) {
 	let node = blankNode();
 	let inNode = false;
 	let gaveName = false;
@@ -120,7 +120,7 @@ function *domize(tokens) {
 				inNode = true;
 			}
 			else {
-				throw 'unexpected token ' + token;
+				throw 'unexpected token ' + JSON.stringify(token) + 'at ' + JSON.stringify(extraInfo);
 			}
 		}
 		else {
@@ -139,6 +139,9 @@ function *domize(tokens) {
 							name: attributeName,
 							value: token.data
 						});
+
+						// reset attribute-ness for next time around
+						attributeName = "";
 					}
 				}
 			}
@@ -180,7 +183,7 @@ function *domize(tokens) {
 					// we are now going to be processing html tags inside of this html tag thing
 					for (const innerNode of domize({
 						[Symbol.iterator]: () => iterator
-					})) {
+					}, extraInfo)) {
 						if (innerNode.closing !== undefined) {
 							// if it has 'closing', it's a closing node.
 							// that means it's directed at us that this node is finally finished!
@@ -215,7 +218,7 @@ function blankNode() {
 /**
  * @param {string} data 
  */
-function *tokenize(data) {
+function *tokenize(data, extraInfo) {
 	let state = 0;
 	let stringBuild = "";
 

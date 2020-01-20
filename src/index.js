@@ -20,7 +20,7 @@ async function main(directory) {
 	console.log(chalk.gray(`parsing ${directory}...`));
 
 	const parseOptions = {
-		html: data => PseudoHTML.parse(data),
+		html: data => PseudoHTML.parse(data, data),
 		css: data => ({ raw: data, parsed: CSSOM.parse(data) })
 	};
 
@@ -43,12 +43,13 @@ async function main(directory) {
 	}));
 
 	files.push(globalCss);
-	
+
 	for (const cssFile of additionalCss) {
 		files.push(cssFile);
 	}
 
-	build(directory, files);
+	// don't feel like figuring out why undefined items are being added, lmao
+	build(directory, files.filter(x => x !== undefined));
 }
 
 function genCss(components) {
