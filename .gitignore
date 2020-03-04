@@ -1,2 +1,2 @@
-node_modules
-example-website/build
+/target
+**/*.rs.bk
