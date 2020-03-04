@@ -38,7 +38,7 @@ impl<'a, 'b> TemplateEngine<'a, 'b> {
 
     #[inline]
     pub fn data(&self) -> Value {
-        Value::Object(self.data)
+        Value::Object(self.data.clone())
     }
 
     #[inline]

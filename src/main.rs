@@ -35,6 +35,8 @@ fn main() {
     println!("good-web compiler {}", env!("CARGO_PKG_VERSION"));
     println!("building in current directory ('{}')", std::env::current_dir().unwrap().display());
 
+    std::env::set_current_dir(std::path::Path::new("example-website"));
+
     // wipe the last build
     {
         let build_dir = fs::read_dir("build");
@@ -156,7 +158,7 @@ fn consume_children_precursor(state: &TemplateEngine, attributes: &'_ [roxmltree
     // then, create a new Vec<u8> with the replaced components
     // parse the document tree and pass it to consume_children
 
-    let new_state = state.compute_state(attributes);
+    let new_state = state.compute_state(attributes).unwrap();
     
     let document: roxmltree::Document = roxmltree::Document::parse(std::str::from_utf8(raw_document.as_ref()).unwrap()).unwrap();
 
@@ -273,7 +275,7 @@ fn consume_children(state: &TemplateEngine, data: &'_ Vec<u8>, children: roxmltr
                 w.start_element(child.tag_name().name());
                 for attribute in child.attributes() {
                     let attribute: &roxmltree::Attribute<'_> = attribute;
-                    let solved: String = state.solve(attribute.value());
+                    let solved: String = state.solve(attribute.value()).unwrap();
                     let value: &str = solved.as_ref();
                     w.write_attribute(attribute.name(), value);
                 }
