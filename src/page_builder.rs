@@ -21,6 +21,11 @@ impl Component {
     pub fn document(&self) -> Document<'_> {
         Document::parse(self.xml_data.as_ref()).unwrap()
     }
+    
+    #[inline]
+    pub fn css_data(&self) -> &String {
+        &self.css_data
+    }
 }
 
 impl std::default::Default for Component {
@@ -36,7 +41,9 @@ impl std::default::Default for Component {
 
 // #[derive(Clone, Copy)]
 pub struct ComponentStore {
-    components: HashMap<String, Component>,
+    // this is public so we can call components.values() directly
+    // i'm not good at rust so i don't know how
+    pub components: HashMap<String, Component>,
     id_counter: Counter,
 }
 
