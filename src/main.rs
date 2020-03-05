@@ -30,7 +30,11 @@ fn main_option() -> Option<()> {
     let result = page_builder::build_page(pages.find_component("index")?, &component_store)?;
 
     println!("BUILT:
-{}", result);
+{}", result.xml());
+
+    for cmp in result.components_used() {
+        println!("used: {}", cmp);
+    }
 
     Some(())
 }

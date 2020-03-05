@@ -5,20 +5,29 @@ use crate::templating::TemplateEngine;
 
 #[derive(Debug)]
 pub struct Component {
+    id: i32,
     xml_data: String,
     css_data: String,
     // document: Document,
 }
 
 impl Component {
+    #[inline]
+    pub fn id(&self) -> i32 {
+        self.id
+    }
+
+    #[inline]
     pub fn document(&self) -> Document<'_> {
         Document::parse(self.xml_data.as_ref()).unwrap()
     }
 }
 
 impl std::default::Default for Component {
+    #[inline]
     fn default() -> Component {
         Component {
+            id: -1,
             xml_data: String::new(),
             css_data: String::new(),
         }
@@ -27,13 +36,35 @@ impl std::default::Default for Component {
 
 // #[derive(Clone, Copy)]
 pub struct ComponentStore {
-    components: HashMap<String, Component>
+    components: HashMap<String, Component>,
+    id_counter: Counter,
+}
+
+struct Counter {
+    current: i32,
+}
+
+impl Counter {
+    pub fn increment(&mut self) -> i32 {
+        let result = self.current;
+        self.current += 1;
+        result
+    }
+    pub fn decrement(&mut self) -> i32 {
+        let result = self.current;
+        self.current -= 1;
+        result
+    }
 }
 
 impl ComponentStore {
+    #[inline]
     pub fn new() -> ComponentStore {
         ComponentStore {
             components: HashMap::new(),
+            id_counter: Counter {
+                current: 0
+            },
         }
     }
 
@@ -42,37 +73,102 @@ impl ComponentStore {
         self.components.get(name)
     }
 
+    #[inline]
+    pub fn find_component_by_id(&self, id: i32) -> Option<&Component> {
+        for component in self.components.values() {
+            if component.id == id {
+                return Some(component);
+            }
+        }
+
+        None
+    }
+
     pub fn store_xml(&mut self, name: String, data: String) -> Result<(), ()> {
-        let entry = self.components.entry(name);
+        let mut used_id = false;
+        let id = self.next_id();
 
-        // ensures that component.document() doesn't fail
-        let document = match Document::parse(data.as_ref()) {
-            Ok(document) => document,
-            Err(_) => return Result::Err(()),
-        };
+        {
+            let entry = self.components.entry(name);
+            let mut component = entry.or_default();
 
-        let mut component = entry.or_default();
+            // ensures that component.document() doesn't fail
+            let document = match Document::parse(data.as_ref()) {
+                Ok(document) => document,
+                Err(_) => return Result::Err(()),
+            };
 
-        component.xml_data = data;
+            if component.id == -1 {
+                component.id = id;
+                used_id = true;
+            }
+            
+            component.xml_data = data;
+        }
+
+        if !used_id {
+            self.prev_id();
+        }
+
+        Ok(())
+    }
+
+    pub fn store_css(&mut self, name: String, data: String) -> Result<(), ()> {
+        let mut used_id = false;
+        let id = self.next_id();
+
+        {
+            let entry = self.components.entry(name);
+            let mut component = entry.or_default();
+
+            if component.id == -1 {
+                component.id = id;
+                used_id = true;
+            }
+
+            component.css_data = data;
+        }
+
+        if !used_id {
+            self.prev_id();
+        }
 
         Ok(())
     }
 
     #[inline]
-    pub fn store_css(&mut self, name: String, data: String) -> Result<(), ()> {
-        let entry = self.components.entry(name);
-        let mut component = entry.or_default();
+    fn next_id(&mut self) -> i32 {
+        self.id_counter.increment()
+    }
 
-        component.css_data = data;
+    #[inline]
+    fn prev_id(&mut self) -> i32 {
+        self.id_counter.decrement()
+    }
+}
 
-        Ok(())
+pub struct BuildResult {
+    xml: String,
+    components_used: Vec<i32>
+}
+
+impl BuildResult {
+    #[inline]
+    pub fn xml(&self) -> &String {
+        &self.xml
+    }
+
+    #[inline]
+    pub fn components_used(&self) -> &Vec<i32> {
+        &self.components_used
     }
 }
 
 // TODO: use Result to detail errors
-pub fn build_page(page: &Component, components: &ComponentStore) -> Option<String> {
+pub fn build_page(page: &Component, components: &ComponentStore) -> Option<BuildResult> {
     let handlebars = handlebars::Handlebars::new();
     let engine = TemplateEngine::new(&handlebars);
+    let mut components_used: Vec<i32> = Vec::new();
 
     // no idea how much we'll need, but let's allocate a pretty large buffer just in case
     let writer = XmlWriter::with_capacity(1_000, Options {
@@ -88,12 +184,18 @@ pub fn build_page(page: &Component, components: &ComponentStore) -> Option<Strin
         components,
         page.document().root(),
         &engine,
+        &mut components_used,
 
         None,
         None,
     )?;
 
-    Some(writer.end_document())
+    let result = writer.end_document();
+
+    Some(BuildResult {
+        xml: result,
+        components_used: components_used,
+    })
 }
 
 #[inline]
@@ -102,6 +204,7 @@ fn compute_recursive_pre(
     components: &ComponentStore,
     node: Node<'_, '_>,
     engine: &TemplateEngine<'_, '_>,
+    components_used: &mut Vec<i32>,
 
     component_attributes: Option<&[Attribute<'_>]>,
     goodweb_inner: Option<Node<'_, '_>>,
@@ -119,6 +222,7 @@ fn compute_recursive_pre(
         components,
         node.children(),
         &engine,
+        components_used,
         goodweb_inner,
     )
 }
@@ -128,6 +232,7 @@ fn compute_recursive<'a, 'b>(
     components: &ComponentStore,
     children: Children<'_, '_>,
     engine: &TemplateEngine<'_, '_>,
+    components_used: &mut Vec<i32>,
     
     goodweb_inner: Option<Node<'_, '_>>,
 ) -> Option<XmlWriter> {
@@ -163,6 +268,7 @@ fn compute_recursive<'a, 'b>(
                                 components,
                                 goodweb_inner,
                                 engine,
+                                components_used,
 
                                 None,
                                 None,
@@ -194,6 +300,7 @@ fn compute_recursive<'a, 'b>(
                         components,
                         child,
                         engine,
+                        components_used,
                         
                         None,
                         goodweb_inner
@@ -215,12 +322,17 @@ fn compute_recursive<'a, 'b>(
                         }
                     };
 
+                    if !components_used.contains(&component.id()) {
+                        components_used.push(component.id());
+                    }
+
                     println!("cmp: innr");
                     writer = compute_recursive_pre(
                         writer,
                         components,
                         component.document().root(),
                         engine,
+                        components_used,
 
                         Some(child.attributes()),
                         // the <GoodWeb:Inner> will be determined by the children
