@@ -169,6 +169,10 @@ impl BuildResult {
     }
 }
 
+struct DocumentInformation {
+    page_name: String,
+}
+
 // Used to box a 'Node' without owning any data
 struct OwnerlessNode<'a> {
     node_data: &'a str,
@@ -215,7 +219,11 @@ fn get_input<'input>(document: &Document<'input>) -> &'input str {
 }
 
 // TODO: use Result to detail errors
-pub fn build_page(page: &Component, components: &ComponentStore) -> Option<BuildResult> {
+pub fn build_page(
+    name: String,
+    page: &Component,
+    components: &ComponentStore,
+) -> Option<BuildResult> {
     let handlebars = handlebars::Handlebars::new();
     let engine = TemplateEngine::new(&handlebars);
     let mut components_used: Vec<i32> = Vec::new();
@@ -235,6 +243,7 @@ pub fn build_page(page: &Component, components: &ComponentStore) -> Option<Build
 
     // we pass in the state and let it own everything, and hope we get the String back
     let mut writer = compute_recursive_pre(
+        &DocumentInformation { page_name: name },
         writer,
         components,
         OwnerlessNode::from_root_node(&page.document()),
@@ -257,6 +266,7 @@ pub fn build_page(page: &Component, components: &ComponentStore) -> Option<Build
 
 #[inline]
 fn compute_recursive_pre(
+    page_info: &DocumentInformation,
     writer: XmlWriter,
     components: &ComponentStore,
     node: OwnerlessNode,
@@ -276,6 +286,7 @@ fn compute_recursive_pre(
     let doc = Document::parse(node.node_data).unwrap();
     let root = doc.root();
     compute_recursive(
+        page_info,
         writer,
         components,
         if use_children {
@@ -290,6 +301,7 @@ fn compute_recursive_pre(
 }
 
 fn compute_recursive<'a, 'b>(
+    page_info: &DocumentInformation,
     writer: XmlWriter,
     components: &ComponentStore,
     children: Children<'_, '_>,
@@ -323,6 +335,7 @@ fn compute_recursive<'a, 'b>(
                             let top = goodweb_inner.pop().unwrap();
 
                             writer = compute_recursive_pre(
+                                page_info,
                                 writer,
                                 components,
                                 top,
@@ -335,7 +348,18 @@ fn compute_recursive<'a, 'b>(
 
                             continue;
                         }
-                        GoodWebComponent::Styles => continue,
+                        GoodWebComponent::Styles => {
+                            let mut href = String::with_capacity(page_info.page_name.len() + 4);
+                            href.push_str(&page_info.page_name);
+                            href.push_str(".css");
+
+                            writer.start_element("link");
+                            writer.write_attribute("rel", "stylesheet");
+                            writer.write_attribute("href", &href); // TODO: know about page
+                            writer.end_element();
+
+                            continue;
+                        }
                         GoodWebComponent::None => {
                             println!(
                                 "Invalid GoodWeb component '{}' - Expected 'Inner' or 'Styles'.",
@@ -360,6 +384,7 @@ fn compute_recursive<'a, 'b>(
                     }
 
                     writer = compute_recursive_pre(
+                        page_info,
                         writer,
                         components,
                         OwnerlessNode::from_node_unsafe(&child),
@@ -395,6 +420,7 @@ fn compute_recursive<'a, 'b>(
                     goodweb_inner.push(raw_text);
 
                     writer = compute_recursive_pre(
+                        page_info,
                         writer,
                         components,
                         OwnerlessNode::from_root_node(&component.document()),

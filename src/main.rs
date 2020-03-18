@@ -38,7 +38,7 @@ fn main_option() -> Option<()> {
     println!("building pages...");
     for (key, page) in pages.components.iter() {
         println!("building '{}'", key);
-        let result = page_builder::build_page(page, &component_store)?;
+        let result = page_builder::build_page(key.clone(), page, &component_store)?;
 
         let mut html_name = String::from("build/");
         html_name.push_str(key);
