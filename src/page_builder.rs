@@ -171,6 +171,57 @@ impl BuildResult {
     }
 }
 
+// Used to box a 'Node' without owning any data
+struct OwnerlessNode<'a> {
+    node_data: &'a str
+}
+
+struct HackyDocument<'a> {
+    input: &'a str,
+    blank_ref_1: Option<i32>,
+}
+
+impl<'a> OwnerlessNode<'a> {
+    pub fn from_node_unsafe<'b>(node: &Node) -> OwnerlessNode<'b> {
+        // TODO: use get_input
+        // i'm not an experienced user of rust :(
+        let input_exposed: HackyDocument = unsafe {
+            std::mem::transmute_copy(node.document())
+        };
+        
+        let document_text = input_exposed.input;
+        OwnerlessNode::from_node(node, document_text)
+    }
+
+    pub fn from_node<'b>(node: &Node, document: &'b str) -> OwnerlessNode<'b> {
+        OwnerlessNode {
+            node_data: &document[node.range()]
+        }
+    }
+
+    pub fn from_root_node<'b>(document: &Document<'b>) -> OwnerlessNode<'b> {
+        // TODO: use get_input
+        // i'm not an experienced user of rust :(
+        let input_exposed: HackyDocument = unsafe {
+            std::mem::transmute_copy(document)
+        };
+        
+        let document_text = input_exposed.input;
+
+        OwnerlessNode {
+            node_data: document_text
+        }
+    }
+}
+
+fn get_input<'input>(document: &Document<'input>) -> &'input str {
+    let input_exposed: HackyDocument = unsafe {
+        std::mem::transmute_copy(document)
+    };
+    
+    input_exposed.input
+}
+
 // TODO: use Result to detail errors
 pub fn build_page(page: &Component, components: &ComponentStore) -> Option<BuildResult> {
     let handlebars = handlebars::Handlebars::new();
@@ -178,7 +229,7 @@ pub fn build_page(page: &Component, components: &ComponentStore) -> Option<Build
     let mut components_used: Vec<i32> = Vec::new();
 
     // no idea how much we'll need, but let's allocate a pretty large buffer just in case
-    let writer = XmlWriter::with_capacity(1_000, Options {
+    let mut writer = XmlWriter::with_capacity(1_000, Options {
         use_single_quote: false,
         indent: Indent::None,
         attributes_indent: Indent::None,
@@ -186,15 +237,16 @@ pub fn build_page(page: &Component, components: &ComponentStore) -> Option<Build
     });
 
     // we pass in the state and let it own everything, and hope we get the String back
-    let writer = compute_recursive_pre(
+    let mut writer = compute_recursive_pre(
         writer,
         components,
-        page.document().root(),
+        OwnerlessNode::from_root_node(&page.document()),
         &engine,
         &mut components_used,
 
         None,
-        None,
+        &mut Vec::new(),
+        true,
     )?;
 
     let result = writer.end_document();
@@ -209,25 +261,28 @@ pub fn build_page(page: &Component, components: &ComponentStore) -> Option<Build
 fn compute_recursive_pre(
     writer: XmlWriter,
     components: &ComponentStore,
-    node: Node<'_, '_>,
+    node: OwnerlessNode,
     engine: &TemplateEngine<'_, '_>,
     components_used: &mut Vec<i32>,
 
     component_attributes: Option<&[Attribute<'_>]>,
-    goodweb_inner: Option<Node<'_, '_>>,
+    goodweb_inner: &mut Vec<OwnerlessNode>,
+
+    use_children: bool
 ) -> Option<XmlWriter> {
     let engine = match component_attributes {
         Some(attributes) => {
-            println!("computing cmp attribs: {:?}", attributes);
             engine.compute_state(attributes)?
         },
         None => engine.compute_state(&[])?,
     };
 
+    let doc = Document::parse(node.node_data).unwrap();
+    let root = doc.root();
     compute_recursive(
         writer,
         components,
-        node.children(),
+        if use_children { root.children() } else { root.first_child().unwrap().children() },
         &engine,
         components_used,
         goodweb_inner,
@@ -241,12 +296,11 @@ fn compute_recursive<'a, 'b>(
     engine: &TemplateEngine<'_, '_>,
     components_used: &mut Vec<i32>,
     
-    goodweb_inner: Option<Node<'_, '_>>,
+    goodweb_inner: &mut Vec<OwnerlessNode>,
 ) -> Option<XmlWriter> {
     let mut writer = writer;
 
     for child in children {
-        println!("deal: {:?}", child);
         match child.node_type() {
             NodeType::Root => panic!("Should never be on a root node."),
             NodeType::Comment => continue,
@@ -262,24 +316,25 @@ fn compute_recursive<'a, 'b>(
                     // TODO: support these
                     match get_goodweb_component(name) {
                         GoodWebComponent::Inner => {
-                            let goodweb_inner = match goodweb_inner {
-                                Some(goodweb_inner) => goodweb_inner,
-                                None => {
-                                    println!("[WARN] invalid GoodWeb-Inner declaration");
-                                    continue;
-                                }
-                            };
+                            if goodweb_inner.len() == 0 {
+                                panic!("[WARN] invalid GoodWeb-Inner declaration");
+                            }
+
+                            let top = goodweb_inner.pop().unwrap();
 
                             writer = compute_recursive_pre(
                                 writer,
                                 components,
-                                goodweb_inner,
+                                top,
                                 engine,
                                 components_used,
 
                                 None,
-                                None,
+                                goodweb_inner,
+                                false,
                             )?;
+
+                            continue;
                         },
                         GoodWebComponent::Styles => continue,
                         GoodWebComponent::None => {
@@ -305,12 +360,13 @@ fn compute_recursive<'a, 'b>(
                     writer = compute_recursive_pre(
                         writer,
                         components,
-                        child,
+                        OwnerlessNode::from_node_unsafe(&child),
                         engine,
                         components_used,
                         
                         None,
-                        goodweb_inner
+                        goodweb_inner,
+                        false,
                     )?;
 
                     writer.end_element();
@@ -333,18 +389,21 @@ fn compute_recursive<'a, 'b>(
                         components_used.push(component.id());
                     }
 
-                    println!("cmp: innr");
+                    let raw_text: OwnerlessNode = OwnerlessNode::from_node_unsafe(&child);
+                    goodweb_inner.push(raw_text);
+
                     writer = compute_recursive_pre(
                         writer,
                         components,
-                        component.document().root(),
+                        OwnerlessNode::from_root_node(&component.document()),
                         engine,
                         components_used,
 
                         Some(child.attributes()),
                         // the <GoodWeb:Inner> will be determined by the children
                         // of the compnent
-                        Some(child)
+                        goodweb_inner,
+                        true,
                     )?;
                 }
             },
