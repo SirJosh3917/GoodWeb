@@ -2,13 +2,13 @@ extern crate handlebars;
 extern crate roxmltree;
 extern crate walkdir;
 
-mod templating;
 mod page_builder;
+mod templating;
 mod website_parser;
 
-use std::path::Path;
-use std::io::Write;
 use std::fs::File;
+use std::io::Write;
+use std::path::Path;
 
 fn main() {
     match main_option() {
@@ -22,13 +22,16 @@ fn main_option() -> Option<()> {
     std::env::set_current_dir(Path::new("website")).unwrap();
 
     println!("good-web compiler {}", env!("CARGO_PKG_VERSION"));
-    println!("building in current directory ('{}')", std::env::current_dir().unwrap().display());
+    println!(
+        "building in current directory ('{}')",
+        std::env::current_dir().unwrap().display()
+    );
 
     ensure_build_exists()?;
 
     println!("parsing components...");
     let component_store = website_parser::compute_components(Path::new("components"))?;
-    
+
     println!("parsing pages...");
     let pages = website_parser::compute_components(Path::new("pages"))?;
 
@@ -36,7 +39,7 @@ fn main_option() -> Option<()> {
     for (key, page) in pages.components.iter() {
         println!("building '{}'", key);
         let result = page_builder::build_page(page, &component_store)?;
-        
+
         let mut html_name = String::from("build/");
         html_name.push_str(key);
         html_name.push_str(".html");
@@ -53,10 +56,13 @@ fn main_option() -> Option<()> {
         match file.write(result.xml().as_bytes()) {
             Ok(_) => (),
             Err(_) => {
-                println!("[ERR] couldn't write xml to file '{}'", component_path.display());
+                println!(
+                    "[ERR] couldn't write xml to file '{}'",
+                    component_path.display()
+                );
             }
         };
-        
+
         let mut css_name = String::from("build/");
         css_name.push_str(key);
         css_name.push_str(".css");
@@ -65,7 +71,10 @@ fn main_option() -> Option<()> {
         let mut file = match File::create(component_path) {
             Ok(file) => file,
             Err(_) => {
-                println!("[ERR] couldn't write css to file '{}'", component_path.display());
+                println!(
+                    "[ERR] couldn't write css to file '{}'",
+                    component_path.display()
+                );
                 continue;
             }
         };
@@ -76,7 +85,10 @@ fn main_option() -> Option<()> {
             match file.write(component.css_data().as_bytes()) {
                 Ok(_) => (),
                 Err(_) => {
-                    println!("[ERR] couldn't write css to file '{}'", component_path.display());
+                    println!(
+                        "[ERR] couldn't write css to file '{}'",
+                        component_path.display()
+                    );
                 }
             };
         }
@@ -107,7 +119,10 @@ fn delete_build() -> Option<()> {
             Ok(_) => return Some(()),
             Err(_) => {
                 tries += 1;
-                println!("failed to cleanup 'build' - attempt {}/{}", tries, MAX_TRIES);
+                println!(
+                    "failed to cleanup 'build' - attempt {}/{}",
+                    tries, MAX_TRIES
+                );
             }
         };
 

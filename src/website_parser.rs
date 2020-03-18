@@ -1,7 +1,7 @@
+use crate::page_builder::{Component, ComponentStore};
 use std::ffi::OsStr;
 use std::path::Path;
 use walkdir::WalkDir;
-use crate::page_builder::{Component, ComponentStore};
 
 pub fn compute_components(components_directory: &Path) -> Option<ComponentStore> {
     let mut component_store: ComponentStore = ComponentStore::new();
@@ -15,10 +15,10 @@ pub fn compute_components(components_directory: &Path) -> Option<ComponentStore>
                 continue;
             }
         };
-        
+
         let file_path = file.path();
         let file_type = file.file_type();
-        
+
         // can't parse directories
         if file_type.is_dir() {
             continue;
@@ -42,26 +42,31 @@ pub fn compute_components(components_directory: &Path) -> Option<ComponentStore>
         };
 
         match extension {
-            ComponentExtension::Xml => {
-                match component_store.store_xml(name, data) {
-                    Ok(_) => continue,
-                    Err(_) => {
-                        println!("[WARN] couldn't parse XML of component '{}'", file_path.display());
-                        continue;
-                    }
+            ComponentExtension::Xml => match component_store.store_xml(name, data) {
+                Ok(_) => continue,
+                Err(_) => {
+                    println!(
+                        "[WARN] couldn't parse XML of component '{}'",
+                        file_path.display()
+                    );
+                    continue;
                 }
             },
-            ComponentExtension::Css => {
-                match component_store.store_css(name, data) {
-                    Ok(_) => continue,
-                    Err(_) => {
-                        println!("[WARN] couldn't parse CSS of component '{}'", file_path.display());
-                        continue;
-                    }
+            ComponentExtension::Css => match component_store.store_css(name, data) {
+                Ok(_) => continue,
+                Err(_) => {
+                    println!(
+                        "[WARN] couldn't parse CSS of component '{}'",
+                        file_path.display()
+                    );
+                    continue;
                 }
             },
             ComponentExtension::Invalid => {
-                println!("[WARN] found invalid extension type for component: '{}'", file.path().display());
+                println!(
+                    "[WARN] found invalid extension type for component: '{}'",
+                    file.path().display()
+                );
                 continue;
             }
         }

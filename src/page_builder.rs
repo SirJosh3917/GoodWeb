@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use roxmltree::{Attribute, Children, Document, Node, NodeType};
-use xmlwriter::{Indent, Options, XmlWriter};
 use crate::templating::TemplateEngine;
+use roxmltree::{Attribute, Children, Document, Node, NodeType};
+use std::collections::HashMap;
+use xmlwriter::{Indent, Options, XmlWriter};
 
 #[derive(Debug)]
 pub struct Component {
@@ -21,7 +21,7 @@ impl Component {
     pub fn document(&self) -> Document<'_> {
         Document::parse(self.xml_data.as_ref()).unwrap()
     }
-    
+
     #[inline]
     pub fn css_data(&self) -> &String {
         &self.css_data
@@ -69,9 +69,7 @@ impl ComponentStore {
     pub fn new() -> ComponentStore {
         ComponentStore {
             components: HashMap::new(),
-            id_counter: Counter {
-                current: 0
-            },
+            id_counter: Counter { current: 0 },
         }
     }
 
@@ -109,7 +107,7 @@ impl ComponentStore {
                 component.id = id;
                 used_id = true;
             }
-            
+
             component.xml_data = data;
         }
 
@@ -156,7 +154,7 @@ impl ComponentStore {
 
 pub struct BuildResult {
     xml: String,
-    components_used: Vec<i32>
+    components_used: Vec<i32>,
 }
 
 impl BuildResult {
@@ -173,7 +171,7 @@ impl BuildResult {
 
 // Used to box a 'Node' without owning any data
 struct OwnerlessNode<'a> {
-    node_data: &'a str
+    node_data: &'a str,
 }
 
 struct HackyDocument<'a> {
@@ -185,40 +183,34 @@ impl<'a> OwnerlessNode<'a> {
     pub fn from_node_unsafe<'b>(node: &Node) -> OwnerlessNode<'b> {
         // TODO: use get_input
         // i'm not an experienced user of rust :(
-        let input_exposed: HackyDocument = unsafe {
-            std::mem::transmute_copy(node.document())
-        };
-        
+        let input_exposed: HackyDocument = unsafe { std::mem::transmute_copy(node.document()) };
+
         let document_text = input_exposed.input;
         OwnerlessNode::from_node(node, document_text)
     }
 
     pub fn from_node<'b>(node: &Node, document: &'b str) -> OwnerlessNode<'b> {
         OwnerlessNode {
-            node_data: &document[node.range()]
+            node_data: &document[node.range()],
         }
     }
 
     pub fn from_root_node<'b>(document: &Document<'b>) -> OwnerlessNode<'b> {
         // TODO: use get_input
         // i'm not an experienced user of rust :(
-        let input_exposed: HackyDocument = unsafe {
-            std::mem::transmute_copy(document)
-        };
-        
+        let input_exposed: HackyDocument = unsafe { std::mem::transmute_copy(document) };
+
         let document_text = input_exposed.input;
 
         OwnerlessNode {
-            node_data: document_text
+            node_data: document_text,
         }
     }
 }
 
 fn get_input<'input>(document: &Document<'input>) -> &'input str {
-    let input_exposed: HackyDocument = unsafe {
-        std::mem::transmute_copy(document)
-    };
-    
+    let input_exposed: HackyDocument = unsafe { std::mem::transmute_copy(document) };
+
     input_exposed.input
 }
 
@@ -229,12 +221,15 @@ pub fn build_page(page: &Component, components: &ComponentStore) -> Option<Build
     let mut components_used: Vec<i32> = Vec::new();
 
     // no idea how much we'll need, but let's allocate a pretty large buffer just in case
-    let mut writer = XmlWriter::with_capacity(1_000, Options {
-        use_single_quote: false,
-        indent: Indent::None,
-        attributes_indent: Indent::None,
-        ..Options::default()
-    });
+    let mut writer = XmlWriter::with_capacity(
+        1_000,
+        Options {
+            use_single_quote: false,
+            indent: Indent::None,
+            attributes_indent: Indent::None,
+            ..Options::default()
+        },
+    );
 
     // we pass in the state and let it own everything, and hope we get the String back
     let mut writer = compute_recursive_pre(
@@ -243,7 +238,6 @@ pub fn build_page(page: &Component, components: &ComponentStore) -> Option<Build
         OwnerlessNode::from_root_node(&page.document()),
         &engine,
         &mut components_used,
-
         None,
         &mut Vec::new(),
         true,
@@ -268,12 +262,10 @@ fn compute_recursive_pre(
     component_attributes: Option<&[Attribute<'_>]>,
     goodweb_inner: &mut Vec<OwnerlessNode>,
 
-    use_children: bool
+    use_children: bool,
 ) -> Option<XmlWriter> {
     let engine = match component_attributes {
-        Some(attributes) => {
-            engine.compute_state(attributes)?
-        },
+        Some(attributes) => engine.compute_state(attributes)?,
         None => engine.compute_state(&[])?,
     };
 
@@ -282,7 +274,11 @@ fn compute_recursive_pre(
     compute_recursive(
         writer,
         components,
-        if use_children { root.children() } else { root.first_child().unwrap().children() },
+        if use_children {
+            root.children()
+        } else {
+            root.first_child().unwrap().children()
+        },
         &engine,
         components_used,
         goodweb_inner,
@@ -295,7 +291,7 @@ fn compute_recursive<'a, 'b>(
     children: Children<'_, '_>,
     engine: &TemplateEngine<'_, '_>,
     components_used: &mut Vec<i32>,
-    
+
     goodweb_inner: &mut Vec<OwnerlessNode>,
 ) -> Option<XmlWriter> {
     let mut writer = writer;
@@ -308,7 +304,7 @@ fn compute_recursive<'a, 'b>(
             NodeType::Text => {
                 writer.write_text(engine.solve(child.text()?)?.trim());
                 continue;
-            },
+            }
             NodeType::Element => {
                 let name = child.tag_name().name();
 
@@ -328,17 +324,19 @@ fn compute_recursive<'a, 'b>(
                                 top,
                                 engine,
                                 components_used,
-
                                 None,
                                 goodweb_inner,
                                 false,
                             )?;
 
                             continue;
-                        },
+                        }
                         GoodWebComponent::Styles => continue,
                         GoodWebComponent::None => {
-                            println!("Invalid GoodWeb component '{}' - Expected 'Inner' or 'Styles'.", name);
+                            println!(
+                                "Invalid GoodWeb component '{}' - Expected 'Inner' or 'Styles'.",
+                                name
+                            );
                             continue;
                         }
                     }
@@ -363,15 +361,13 @@ fn compute_recursive<'a, 'b>(
                         OwnerlessNode::from_node_unsafe(&child),
                         engine,
                         components_used,
-                        
                         None,
                         goodweb_inner,
                         false,
                     )?;
 
                     writer.end_element();
-                }
-                else {
+                } else {
                     // we're dealing with a component now.
                     // all we need to do is compute the component with its state.
                     // we don't need to write anything, we'll leave all the writing to
@@ -398,7 +394,6 @@ fn compute_recursive<'a, 'b>(
                         OwnerlessNode::from_root_node(&component.document()),
                         engine,
                         components_used,
-
                         Some(child.attributes()),
                         // the <GoodWeb:Inner> will be determined by the children
                         // of the compnent
@@ -406,7 +401,7 @@ fn compute_recursive<'a, 'b>(
                         true,
                     )?;
                 }
-            },
+            }
         };
     }
 
@@ -435,6 +430,6 @@ fn get_goodweb_component(name: &str) -> GoodWebComponent {
     match name {
         "GoodWeb-Inner" => GoodWebComponent::Inner,
         "GoodWeb-Styles" => GoodWebComponent::Styles,
-        _ => GoodWebComponent::None
+        _ => GoodWebComponent::None,
     }
 }

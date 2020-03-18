@@ -1,11 +1,11 @@
 extern crate serde;
 extern crate serde_json;
 
-use roxmltree::Attribute;
 use handlebars::Handlebars;
-use serde_json::{Value, Number, Map};
+use roxmltree::Attribute;
+use serde_json::{Map, Number, Value};
 
-/// Represents an engine used for computing 
+/// Represents an engine used for computing
 pub struct TemplateEngine<'a, 'b> {
     handlebars_instance: &'a Handlebars<'b>,
     data: Map<String, Value>,
@@ -43,7 +43,10 @@ impl<'a, 'b> TemplateEngine<'a, 'b> {
 
     #[inline]
     pub fn solve(&self, needs_computation: &str) -> Option<String> {
-        match self.handlebars_instance.render_template(needs_computation, &self.data()) {
+        match self
+            .handlebars_instance
+            .render_template(needs_computation, &self.data())
+        {
             Ok(result) => Some(result),
             Err(_) => None,
         }
