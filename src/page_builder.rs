@@ -231,6 +231,8 @@ pub fn build_page(page: &Component, components: &ComponentStore) -> Option<Build
         },
     );
 
+    let mut goodweb_inner = &mut Vec::new();
+
     // we pass in the state and let it own everything, and hope we get the String back
     let mut writer = compute_recursive_pre(
         writer,
@@ -239,9 +241,11 @@ pub fn build_page(page: &Component, components: &ComponentStore) -> Option<Build
         &engine,
         &mut components_used,
         None,
-        &mut Vec::new(),
+        goodweb_inner,
         true,
     )?;
+
+    println!("left: {:?}", goodweb_inner.len());
 
     let result = writer.end_document();
 
@@ -386,6 +390,8 @@ fn compute_recursive<'a, 'b>(
                     }
 
                     let raw_text: OwnerlessNode = OwnerlessNode::from_node_unsafe(&child);
+
+                    let len = goodweb_inner.len();
                     goodweb_inner.push(raw_text);
 
                     writer = compute_recursive_pre(
@@ -400,6 +406,12 @@ fn compute_recursive<'a, 'b>(
                         goodweb_inner,
                         true,
                     )?;
+
+                    // we want to get the goodweb_inner size the same as before so that
+                    // <GoodWeb-Inner/>s are preserved correctly.
+                    while goodweb_inner.len() > len {
+                        goodweb_inner.pop();
+                    }
                 }
             }
         };
