@@ -19,7 +19,7 @@ serde = { version = "1.0.104", features = ["derive"] }
 serde_json = "1.0.48"
 
 # roxmltree: xml parser for goodweb components & pages
-roxmltree = "0.9.1"
+roxmltree = "0.10.0"
 
 # walks directories while building to search for all files
 walkdir = "2.3.1"
